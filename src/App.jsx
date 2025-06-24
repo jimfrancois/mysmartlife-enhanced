@@ -21,8 +21,13 @@ function App() {
   const [showNoteForm, setShowNoteForm] = useState(false)
   const [editingItem, setEditingItem] = useState(null)
   
-  // États pour les formulaires
-  const [eventForm, setEventForm] = useState({ title: '', time: '', type: 'reminder' })
+  // États pour les formulaires avec date/heure améliorée
+  const [eventForm, setEventForm] = useState({ 
+    title: '', 
+    date: '', 
+    time: '', 
+    type: 'reminder' 
+  })
   const [taskForm, setTaskForm] = useState({ text: '' })
   const [noteForm, setNoteForm] = useState({ title: '', content: '' })
 
@@ -52,13 +57,25 @@ function App() {
     })
   }
 
-  // Fonctions pour les événements
+  const formatDateTime = (dateStr, timeStr) => {
+    if (dateStr && timeStr) {
+      const date = new Date(dateStr)
+      return `${date.toLocaleDateString('fr-FR')} à ${timeStr}`
+    }
+    return timeStr || 'Heure non définie'
+  }
+
+  // Fonctions pour les événements avec date/heure améliorée
   const handleAddEvent = () => {
-    if (eventForm.title && eventForm.time) {
-      const newEvent = LocalStorageService.addEvent(eventForm)
+    if (eventForm.title && eventForm.date && eventForm.time) {
+      const eventData = {
+        ...eventForm,
+        time: formatDateTime(eventForm.date, eventForm.time)
+      }
+      const newEvent = LocalStorageService.addEvent(eventData)
       if (newEvent) {
         setEvents(LocalStorageService.getEvents())
-        setEventForm({ title: '', time: '', type: 'reminder' })
+        setEventForm({ title: '', date: '', time: '', type: 'reminder' })
         setShowEventForm(false)
       }
     }
@@ -66,16 +83,45 @@ function App() {
 
   const handleEditEvent = (event) => {
     setEditingItem(event)
-    setEventForm({ title: event.title, time: event.time, type: event.type })
+    // Extraire la date et l'heure du format stocké
+    const eventTime = event.time
+    let date = '', time = ''
+    
+    if (eventTime.includes(' à ')) {
+      const parts = eventTime.split(' à ')
+      if (parts.length === 2) {
+        const datePart = parts[0]
+        time = parts[1]
+        // Convertir la date française en format ISO
+        const dateMatch = datePart.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+        if (dateMatch) {
+          date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`
+        }
+      }
+    } else {
+      time = eventTime
+      date = new Date().toISOString().split('T')[0] // Date d'aujourd'hui par défaut
+    }
+    
+    setEventForm({ 
+      title: event.title, 
+      date: date, 
+      time: time, 
+      type: event.type 
+    })
     setShowEventForm(true)
   }
 
   const handleUpdateEvent = () => {
-    if (editingItem && eventForm.title && eventForm.time) {
-      LocalStorageService.updateEvent(editingItem.id, eventForm)
+    if (editingItem && eventForm.title && eventForm.date && eventForm.time) {
+      const eventData = {
+        ...eventForm,
+        time: formatDateTime(eventForm.date, eventForm.time)
+      }
+      LocalStorageService.updateEvent(editingItem.id, eventData)
       setEvents(LocalStorageService.getEvents())
       setEditingItem(null)
-      setEventForm({ title: '', time: '', type: 'reminder' })
+      setEventForm({ title: '', date: '', time: '', type: 'reminder' })
       setShowEventForm(false)
     }
   }
@@ -162,7 +208,7 @@ function App() {
     setShowTaskForm(false)
     setShowNoteForm(false)
     setEditingItem(null)
-    setEventForm({ title: '', time: '', type: 'reminder' })
+    setEventForm({ title: '', date: '', time: '', type: 'reminder' })
     setTaskForm({ text: '' })
     setNoteForm({ title: '', content: '' })
   }
@@ -173,7 +219,7 @@ function App() {
       {/* Welcome Section */}
       <div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">
-         Hello {userPreferences.userName || 'Friend'} 👋
+          Hello {userPreferences.userName || 'Friend'} 👋
         </h2>
         <p className="text-gray-600">Il est {formatTime(currentTime)}</p>
       </div>
@@ -198,7 +244,7 @@ function App() {
         </div>
         <div className="space-y-3 ml-11">
           {events.slice(0, 2).map(event => (
-            <p key={event.id} className="text-gray-700">{event.title} à {event.time}</p>
+            <p key={event.id} className="text-gray-700">{event.title} - {event.time}</p>
           ))}
           {events.length === 0 && (
             <p className="text-gray-500 italic">Aucun événement programmé</p>
@@ -300,7 +346,7 @@ function App() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">{event.title}</h3>
-                  <p className="text-gray-600">À {event.time}</p>
+                  <p className="text-gray-600">{event.time}</p>
                 </div>
                 <div className="flex space-x-2">
                   <Button size="sm" variant="outline" onClick={() => handleEditEvent(event)}>
@@ -455,7 +501,10 @@ function App() {
                 onClick={() => {
                   if (confirm('Êtes-vous sûr de vouloir effacer toutes les données ?')) {
                     LocalStorageService.clearAllData()
-                    window.location.reload()
+                    setEvents([])
+                    setTasks([])
+                    setNotes([])
+                    setUserPreferences({})
                   }
                 }}
               >
@@ -470,10 +519,12 @@ function App() {
             <CardTitle>À propos</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-gray-600">
-              MySmartLife - Version 2.0<br/>
-              Assistant personnel intelligent qui fonctionne hors ligne.
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm">MySmartLife - Version 2.0</p>
+              <p className="text-sm text-gray-600">
+                Assistant personnel intelligent qui fonctionne hors ligne.
+              </p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -481,181 +532,198 @@ function App() {
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-sm mx-auto">
-      {/* Status Bar */}
-      <div className="flex justify-between items-center px-6 py-2 bg-white">
-        <span className="text-lg font-semibold">{formatTime(currentTime)}</span>
-        <div className="flex items-center space-x-1">
-          <div className="flex space-x-1">
-            <div className="w-1 h-4 bg-black rounded-full"></div>
-            <div className="w-1 h-4 bg-black rounded-full"></div>
-            <div className="w-1 h-4 bg-black rounded-full"></div>
-            <div className="w-1 h-4 bg-gray-300 rounded-full"></div>
-          </div>
-          <div className="ml-2">
-            <svg className="w-6 h-4" viewBox="0 0 24 16" fill="none">
-              <path d="M2 4h20v8H2z" stroke="currentColor" strokeWidth="2" fill="none"/>
-              <path d="M22 6h2v4h-2z" fill="currentColor"/>
-            </svg>
-          </div>
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <div className="text-center py-4 bg-white">
-        <h1 className="text-xl font-semibold text-gray-800">MySmartLife</h1>
-      </div>
+      <header className="bg-white shadow-sm border-b">
+        <div className="px-6 py-4">
+          <h1 className="text-xl font-semibold text-gray-900">MySmartLife</h1>
+        </div>
+      </header>
 
       {/* Main Content */}
-      {activeTab === 'home' && renderHomeScreen()}
-      {activeTab === 'events' && renderEventsScreen()}
-      {activeTab === 'tasks' && renderTasksScreen()}
-      {activeTab === 'notes' && renderNotesScreen()}
-      {activeTab === 'settings' && renderSettingsScreen()}
+      <main className="flex-1 flex flex-col">
+        {activeTab === 'home' && renderHomeScreen()}
+        {activeTab === 'events' && renderEventsScreen()}
+        {activeTab === 'tasks' && renderTasksScreen()}
+        {activeTab === 'notes' && renderNotesScreen()}
+        {activeTab === 'settings' && renderSettingsScreen()}
+      </main>
 
       {/* Modales pour les formulaires */}
-      {(showEventForm || showTaskForm || showNoteForm) && (
+      {showEventForm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            {showEventForm && (
+            <h3 className="text-lg font-semibold mb-4">
+              {editingItem ? 'Modifier le rappel' : 'Nouveau rappel'}
+            </h3>
+            <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold mb-4">
-                  {editingItem ? 'Modifier le rappel' : 'Nouveau rappel'}
-                </h3>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Titre du rappel"
-                    value={eventForm.title}
-                    onChange={(e) => setEventForm({...eventForm, title: e.target.value})}
-                  />
-                  <Input
-                    placeholder="Heure (ex: 10h)"
-                    value={eventForm.time}
-                    onChange={(e) => setEventForm({...eventForm, time: e.target.value})}
-                  />
-                  <div className="flex space-x-2">
-                    <Button onClick={editingItem ? handleUpdateEvent : handleAddEvent}>
-                      <Save className="w-4 h-4 mr-2" />
-                      {editingItem ? 'Modifier' : 'Ajouter'}
-                    </Button>
-                    <Button variant="outline" onClick={closeAllForms}>
-                      <X className="w-4 h-4 mr-2" />
-                      Annuler
-                    </Button>
-                  </div>
-                </div>
+                <label className="block text-sm font-medium mb-2">Titre du rappel</label>
+                <Input
+                  value={eventForm.title}
+                  onChange={(e) => setEventForm({...eventForm, title: e.target.value})}
+                  placeholder="Titre du rappel"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-sm font-medium mb-2">Date</label>
+                <Input
+                  type="date"
+                  value={eventForm.date}
+                  onChange={(e) => setEventForm({...eventForm, date: e.target.value})}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Heure</label>
+                <Input
+                  type="time"
+                  value={eventForm.time}
+                  onChange={(e) => setEventForm({...eventForm, time: e.target.value})}
+                />
+              </div>
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <Button 
+                onClick={editingItem ? handleUpdateEvent : handleAddEvent}
+                className="flex-1"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {editingItem ? 'Modifier' : 'Ajouter'}
+              </Button>
+              <Button variant="outline" onClick={closeAllForms}>
+                <X className="w-4 h-4 mr-2" />
+                Annuler
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {showTaskForm && (
+      {showTaskForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">
+              {editingItem ? 'Modifier la tâche' : 'Nouvelle tâche'}
+            </h3>
+            <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold mb-4">
-                  {editingItem ? 'Modifier la tâche' : 'Nouvelle tâche'}
-                </h3>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Description de la tâche"
-                    value={taskForm.text}
-                    onChange={(e) => setTaskForm({...taskForm, text: e.target.value})}
-                  />
-                  <div className="flex space-x-2">
-                    <Button onClick={editingItem ? handleUpdateTask : handleAddTask}>
-                      <Save className="w-4 h-4 mr-2" />
-                      {editingItem ? 'Modifier' : 'Ajouter'}
-                    </Button>
-                    <Button variant="outline" onClick={closeAllForms}>
-                      <X className="w-4 h-4 mr-2" />
-                      Annuler
-                    </Button>
-                  </div>
-                </div>
+                <label className="block text-sm font-medium mb-2">Description de la tâche</label>
+                <Input
+                  value={taskForm.text}
+                  onChange={(e) => setTaskForm({...taskForm, text: e.target.value})}
+                  placeholder="Description de la tâche"
+                />
               </div>
-            )}
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <Button 
+                onClick={editingItem ? handleUpdateTask : handleAddTask}
+                className="flex-1"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {editingItem ? 'Modifier' : 'Ajouter'}
+              </Button>
+              <Button variant="outline" onClick={closeAllForms}>
+                <X className="w-4 h-4 mr-2" />
+                Annuler
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            {showNoteForm && (
+      {showNoteForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">
+              {editingItem ? 'Modifier la note' : 'Nouvelle note'}
+            </h3>
+            <div className="space-y-4">
               <div>
-                <h3 className="text-lg font-semibold mb-4">
-                  {editingItem ? 'Modifier la note' : 'Nouvelle note'}
-                </h3>
-                <div className="space-y-4">
-                  <Input
-                    placeholder="Titre de la note"
-                    value={noteForm.title}
-                    onChange={(e) => setNoteForm({...noteForm, title: e.target.value})}
-                  />
-                  <Textarea
-                    placeholder="Contenu de la note"
-                    value={noteForm.content}
-                    onChange={(e) => setNoteForm({...noteForm, content: e.target.value})}
-                    rows={4}
-                  />
-                  <div className="flex space-x-2">
-                    <Button onClick={editingItem ? handleUpdateNote : handleAddNote}>
-                      <Save className="w-4 h-4 mr-2" />
-                      {editingItem ? 'Modifier' : 'Ajouter'}
-                    </Button>
-                    <Button variant="outline" onClick={closeAllForms}>
-                      <X className="w-4 h-4 mr-2" />
-                      Annuler
-                    </Button>
-                  </div>
-                </div>
+                <label className="block text-sm font-medium mb-2">Titre de la note</label>
+                <Input
+                  value={noteForm.title}
+                  onChange={(e) => setNoteForm({...noteForm, title: e.target.value})}
+                  placeholder="Titre de la note"
+                />
               </div>
-            )}
+              <div>
+                <label className="block text-sm font-medium mb-2">Contenu</label>
+                <Textarea
+                  value={noteForm.content}
+                  onChange={(e) => setNoteForm({...noteForm, content: e.target.value})}
+                  placeholder="Contenu de la note"
+                  rows={4}
+                />
+              </div>
+            </div>
+            <div className="flex space-x-3 mt-6">
+              <Button 
+                onClick={editingItem ? handleUpdateNote : handleAddNote}
+                className="flex-1"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {editingItem ? 'Modifier' : 'Ajouter'}
+              </Button>
+              <Button variant="outline" onClick={closeAllForms}>
+                <X className="w-4 h-4 mr-2" />
+                Annuler
+              </Button>
+            </div>
           </div>
         </div>
       )}
 
       {/* Bottom Navigation */}
-      <div className="bg-white border-t border-gray-200 px-6 py-3">
-        <div className="flex justify-between items-center">
-          <button 
+      <nav className="bg-white border-t border-gray-200 px-6 py-3">
+        <div className="flex justify-around">
+          <Button
+            variant={activeTab === 'home' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setActiveTab('home')}
             className="flex flex-col items-center space-y-1"
           >
-            <Home className={`w-6 h-6 ${activeTab === 'home' ? 'text-blue-500' : 'text-gray-400'}`} />
-            <span className={`text-xs font-medium ${activeTab === 'home' ? 'text-blue-500' : 'text-gray-400'}`}>
-              Accueil
-            </span>
-          </button>
-          <button 
+            <Home className="w-5 h-5" />
+            <span className="text-xs">Accueil</span>
+          </Button>
+          <Button
+            variant={activeTab === 'events' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setActiveTab('events')}
             className="flex flex-col items-center space-y-1"
           >
-            <Calendar className={`w-6 h-6 ${activeTab === 'events' ? 'text-blue-500' : 'text-gray-400'}`} />
-            <span className={`text-xs font-medium ${activeTab === 'events' ? 'text-blue-500' : 'text-gray-400'}`}>
-              Rappels
-            </span>
-          </button>
-          <button 
+            <Calendar className="w-5 h-5" />
+            <span className="text-xs">Rappels</span>
+          </Button>
+          <Button
+            variant={activeTab === 'tasks' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setActiveTab('tasks')}
             className="flex flex-col items-center space-y-1"
           >
-            <CheckSquare className={`w-6 h-6 ${activeTab === 'tasks' ? 'text-blue-500' : 'text-gray-400'}`} />
-            <span className={`text-xs font-medium ${activeTab === 'tasks' ? 'text-blue-500' : 'text-gray-400'}`}>
-              Tâches
-            </span>
-          </button>
-          <button 
+            <CheckSquare className="w-5 h-5" />
+            <span className="text-xs">Tâches</span>
+          </Button>
+          <Button
+            variant={activeTab === 'notes' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setActiveTab('notes')}
             className="flex flex-col items-center space-y-1"
           >
-            <FileText className={`w-6 h-6 ${activeTab === 'notes' ? 'text-blue-500' : 'text-gray-400'}`} />
-            <span className={`text-xs font-medium ${activeTab === 'notes' ? 'text-blue-500' : 'text-gray-400'}`}>
-              Notes
-            </span>
-          </button>
-          <button 
+            <FileText className="w-5 h-5" />
+            <span className="text-xs">Notes</span>
+          </Button>
+          <Button
+            variant={activeTab === 'settings' ? 'default' : 'ghost'}
+            size="sm"
             onClick={() => setActiveTab('settings')}
             className="flex flex-col items-center space-y-1"
           >
-            <Settings className={`w-6 h-6 ${activeTab === 'settings' ? 'text-blue-500' : 'text-gray-400'}`} />
-            <span className={`text-xs font-medium ${activeTab === 'settings' ? 'text-blue-500' : 'text-gray-400'}`}>
-              Paramètres
-            </span>
-          </button>
+            <Settings className="w-5 h-5" />
+            <span className="text-xs">Paramètres</span>
+          </Button>
         </div>
-      </div>
+      </nav>
     </div>
   )
 }
