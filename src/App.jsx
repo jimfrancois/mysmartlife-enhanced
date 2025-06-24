@@ -173,7 +173,7 @@ function App() {
       {/* Welcome Section */}
       <div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">
-          Bonjour {userPreferences.userName || 'Jimitry'} 👋
+         Hello {userPreferences.userName || 'Friend'} 👋
         </h2>
         <p className="text-gray-600">Il est {formatTime(currentTime)}</p>
       </div>
